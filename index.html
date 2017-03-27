@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html manifest="main.manifest">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no;" />
+<!-- <meta name="apple-mobile-web-app-capable" content="yes" /> -->
+<title>500px</title>
+<style type="text/css">
+html, body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  font-family: '-webkit-system-font';
+  display: -webkit-box;
+  text-align: center;
+  -webkit-box-align: center;
+  -webkit-box-pack: center;
+  -webkit-user-select: none;
+}
+p {
+  margin: 0;
+}
+.content-container {
+  min-width: 320px;
+  max-width: 580px;
+  margin: 0 auto;
+  position: relative;
+}
+.container {
+  max-width: 500px;
+  max-height: 500px;
+  margin: 10px 0;
+}
+.container img {
+  max-width: 100%;
+  width: 100%;
+  height: auto;
+}
+
+label:before {
+  content: 'Choose image';
+}
+input[type=file] {
+  display: none;
+}
+button, label:before {
+  font-size: 14px;
+  border: none;
+  background-color: black;
+  color: white;
+  padding: 10px 20px;
+}
+
+.step1,
+.step2 {
+  display: none;
+}
+body.current-step1 .step1,
+body.current-step2 .step2 {
+  display: block;
+}
+
+body.portrait .step1,
+body.portrait .step2 {
+  display: none;
+}
+.portrait-notice {
+  display: none;
+}
+body.portrait .portrait-notice {
+  display: block;
+}
+</style>
+</head>
+<body class="current-step1">
+    <div class="content-container">
+        <div class="step1">
+            <label>
+                <input type="file" id="take-picture" accept="image/*">
+            </label>
+        </div>
+        <div class="step2">
+            <button type="button" id="back">Back</button>
+            <div class="container">
+                <img src="about:blank" alt="" id="show-picture">
+            </div>
+            <p id="error"></p>
+            <button type="button" id="rotate-picture" disabled>Rotate 90&deg;</button>
+        </div>
+        <div class="portrait-notice">
+            Please, hold the iPad horizontally, when taking photos.
+        </div>
+    </div>
+<script>
+(function () {
+    var side = 500;
+    var canvas = undefined;
+    var showPicture = document.querySelector("#show-picture");
+    var bodyElement = document.querySelector("body");
+
+    var rot90Picture = document.querySelector("#rotate-picture");
+    rot90Picture.disabled = true;
+    rot90Picture.addEventListener("click", function() {
+        rot90Picture.disabled = true;
+        rot90(canvas, showPicture, function() {
+            rot90Picture.disabled = false;
+        });
+    });
+
+    function toggleSteps() {
+        bodyElement.classList.toggle("current-step2");
+        bodyElement.classList.toggle("current-step1");
+    }
+
+    var backButton = document.querySelector("#back");
+    backButton.addEventListener("click", toggleSteps);
+
+    var takePicture = document.querySelector("#take-picture");
+    takePicture.addEventListener("change", function(event) {
+        var files = event.target.files;
+
+        if (files && files.length > 0) {
+            var file = files[0];
+
+            toggleSteps();
+
+            try {
+                var URL = window.URL || window.webkitURL;
+                var imgURL = URL.createObjectURL(file);
+
+                showPicture.src = imgURL;
+
+                var initialLoad = true;
+                showPicture.onload = function() {
+                    if (! initialLoad) {
+                        return;
+                    }
+
+                    initialLoad = false;
+
+                    URL.revokeObjectURL(imgURL);  
+
+                    canvas = resizeImage(showPicture, side, side);
+
+                    if (rot90Picture) {
+                        rot90Picture.disabled = false;
+                    }
+                };
+            } catch (e) {
+                try {
+                    // Fallback if createObjectURL is not supported
+                    var fileReader = new FileReader();
+
+                    fileReader.onload = function (event) {
+                        showPicture.src = event.target.result;
+
+                        resizeImage(showPicture, side, side);
+
+                        if (rot90Picture) {
+                            rot90Picture.disabled = false;
+                        }
+                    };
+                    fileReader.readAsDataURL(file);
+                }
+                catch (e) {
+                    var error = document.querySelector("#error");
+                    if (error) {
+                        error.innerText = "Neither createObjectURL or FileReader are supported";
+                    }
+                }
+            }
+        }
+    });
+
+    function resizeImage(imageElement, width, height) {
+        var resizeCanvas = document.createElement("canvas");
+
+        var originalWidth = imageElement.naturalWidth;
+        var originalHeight = imageElement.naturalHeight;
+        var ratio = originalWidth / originalHeight;
+
+        var maxSize = Math.max(width, height);
+        var targetHeight = Math.min(maxSize, Math.max(originalWidth, originalHeight));
+        var targetWidth = targetHeight;
+
+        if (ratio > 1) {
+            targetWidth = Math.round(targetHeight * ratio);
+        } else {
+            targetHeight = Math.round(targetWidth / ratio);
+        }
+
+        var left = 0;
+        var top = 0;
+        var sourceWidth = Math.min(originalWidth, originalHeight);
+        var sourceHeight = sourceWidth;
+
+        if (ratio < 1) {
+            top = (originalHeight / 2) - (originalWidth / 2);
+            sourceWidth = originalWidth;
+        } else {
+            left = (originalWidth / 2) - (originalHeight / 2);
+            sourceWidth = originalHeight;
+        }
+
+        resizeCanvas.width = width;
+        resizeCanvas.height = height;
+        resizeCanvas.getContext("2d").drawImage(imageElement, left, top, sourceWidth, sourceHeight, 0, 0, width, height);
+
+        setImageSrcFromCanvas(imageElement, resizeCanvas);
+
+        return resizeCanvas;
+    }
+
+    function rot90(canvas, imageElement, callback) {
+        if (! canvas) {
+            setTimeout(function() { callback() });
+            return;
+        }
+
+        var imageData = new Image();
+        imageData.src = canvas.toDataURL();
+
+        imageData.onload = function() {
+            var ctx = canvas.getContext("2d");
+
+            // translate to center-canvas 
+            // the origin [0,0] is now center-canvas
+            ctx.translate(canvas.width/2, canvas.height/2);
+            // rotate the canvas by +90% (==Math.PI/2)
+            ctx.rotate(Math.PI/2);
+            // since images draw from top-left - offset the draw by 1/2 width & height
+            ctx.drawImage(imageData, -canvas.width/2, -canvas.height/2);
+            // un-rotate the canvas by -90% (== -Math.PI/2)
+            ctx.rotate(-Math.PI/2);
+            // un-translate the canvas back to origin==top-left canvas
+            ctx.translate(-canvas.width/2, -canvas.height/2);
+
+            imageData = null;
+            setImageSrcFromCanvas(imageElement, canvas);
+
+            callback();
+        }
+    }
+
+    function setImageSrcFromCanvas(imageElement, canvas) {
+        var toDataURLFailed = false;
+
+        try {
+            imageElement.src = canvas.toDataURL("image/jpeg");
+        } catch (e) {
+            // android may generate png
+            toDataURLFailed = true;
+        }
+
+        if ((toDataURLFailed || imageElement.src.slice(0, "data:image/jpeg".length) !== "data:image/jpeg")) {
+            // try {
+            //     var encoder = new JPEGEncoder();
+            //     var data = encoder.encode(canvas.getImageData(0, 0, width, height), 85);
+            //     imageElement.src = data;
+            // } catch(e) {
+            // }
+            
+            imageElement.src = canvas.toDataURL("image/png");
+
+            var error = document.querySelector("#error");
+            if (error) {
+                error.innerText = "The resulting image is not JPEG, but lossless PNG.";
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    window.addEventListener("orientationchange", function(event) {
+        var isDeviceLandscape = Math.abs(window.orientation) === 90;
+        document.querySelector("body").classList.toggle("portrait", ! isDeviceLandscape);
+    });
+
+
+    // if (window.navigator.standalone == true) {
+    //   console.log("I'm standalone");
+    // }
+
+    document.addEventListener("touchmove", function(event) { 
+        event.preventDefault(); 
+    });
+
+})();
+</script>
+</body>
+</html>
