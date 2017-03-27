@@ -4,6 +4,7 @@
   "description": "A simple iOS 9 web app to capture photos and resize them to 500px",
   "main": "server.js",
   "scripts": {
+    "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
