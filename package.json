@@ -1,6 +1,6 @@
 {
   "name": "500px",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A simple iOS 9 web app to capture photos and resize them to 500px",
   "main": "server.js",
   "scripts": {
